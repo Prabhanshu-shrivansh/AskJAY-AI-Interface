@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AskJay 🤖</title>
+
+<style>
+:root {
+  --bg: #0f172a;
+  --header: #1e293b;
+  --text: #ffffff;
+  --bot-msg: #334155;
+  --user-msg: #3b82f6;
+  --accent: #22c55e;
+  --input-bg: rgba(255,255,255,0.05);
+}
+
+.light-theme {
+  --bg: #f1f5f9;
+  --header: #ffffff;
+  --text: #1e293b;
+  --bot-msg: #e2e8f0;
+  --input-bg: #ffffff;
+}
+
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  background: var(--header);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.top-buttons button {
+  margin-left: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #475569;
+  color: white;
+  cursor: pointer;
+}
+
+#chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  padding: 12px;
+  border-radius: 12px;
+  max-width: 80%;
+}
+
+.user {
+  background: var(--user-msg);
+  align-self: flex-end;
+}
+
+.bot {
+  background: var(--bot-msg);
+}
+
+.msg img, .msg video {
+  max-width: 100%;
+  border-radius: 10px;
+  margin-top: 6px;
+}
+
+audio {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.actions {
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.actions span {
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+#input-area {
+  display: flex;
+  padding: 15px;
+  background: var(--header);
+}
+
+input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+button.send {
+  margin-left: 10px;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.typing {
+  font-style: italic;
+  opacity: 0.6;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h3>🤖 AskJay</h3>
+  <div class="top-buttons">
+    <button onclick="clearChat()">Clear</button>
+    <button onclick="exportChat()">Export</button>
+    <button onclick="toggleTheme()">Theme</button>
+  </div>
+</header>
+
+<div id="chat"></div>
+<div id="typing" class="typing" style="display:none">Thinking...</div>
+
+<div id="input-area">
+  <input id="msg" placeholder="Type message or paste media URL..." />
+  <button class="send" onclick="send()">Send</button>
+</div>
+
+<script>
+let history = [];
+let isDark = true;
+
+// LOAD HISTORY
+window.onload = () => {
+  let saved = localStorage.getItem("chat_history");
+  if (saved) {
+    history = JSON.parse(saved);
+    history.forEach(m => renderMessage(m.text, m.type, false));
+  }
+};
+
+// RENDER MESSAGE
+function renderMessage(text, type, save=true) {
+  const chat = document.getElementById("chat");
+  let div = document.createElement("div");
+  div.className = "msg " + type;
+
+  // IMAGE
+  if (text.match(/\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i)) {
+    let img = document.createElement("img");
+    img.src = text;
+    div.appendChild(img);
+  }
+
+  // VIDEO
+  else if (text.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
+    let vid = document.createElement("video");
+    vid.src = text;
+    vid.controls = true;
+    div.appendChild(vid);
+  }
+
+  // AUDIO
+  else if (text.match(/\.(mp3|wav)(\?.*)?$/i)) {
+    let aud = document.createElement("audio");
+    aud.src = text;
+    aud.controls = true;
+    div.appendChild(aud);
+  }
+
+  // TEXT
+  else {
+    let content = document.createElement("div");
+    content.innerText = text;
+    div.appendChild(content);
+  }
+
+  // ACTIONS
+  let actions = document.createElement("div");
+  actions.className = "actions";
+
+  let copy = document.createElement("span");
+  copy.innerText = "📋";
+  copy.onclick = () => navigator.clipboard.writeText(text);
+
+  let del = document.createElement("span");
+  del.innerText = "🗑";
+  del.onclick = () => div.remove();
+
+  let speak = document.createElement("span");
+  speak.innerText = "🔊";
+  speak.onclick = () => speakText(text);
+
+  let stop = document.createElement("span");
+  stop.innerText = "⛔";
+  stop.onclick = () => speechSynthesis.cancel();
+
+  actions.append(copy, del, speak, stop);
+  div.appendChild(actions);
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+
+  if (save) {
+    history.push({text, type});
+    localStorage.setItem("chat_history", JSON.stringify(history.slice(-50)));
+  }
+}
+
+// SPEECH (manual only)
+function speakText(msg) {
+  if ('speechSynthesis' in window) {
+    const u = new SpeechSynthesisUtterance(msg);
+    speechSynthesis.speak(u);
+  }
+}
+
+// SEND
+async function send() {
+  let input = document.getElementById("msg");
+  let text = input.value.trim();
+  if (!text) return;
+
+  renderMessage(text, "user");
+  input.value = "";
+
+  document.getElementById("typing").style.display = "block";
+
+  try {
+    let res = await fetch("http://127.0.0.1:8000/chat", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({message:text})
+    });
+
+    let data = await res.json();
+    document.getElementById("typing").style.display = "none";
+
+    // ✅ HANDLE ALL TYPES CLEANLY
+    if (data.image_url) renderMessage(data.image_url, "bot");
+    if (data.audio_url) renderMessage(data.audio_url, "bot");
+    if (data.response) renderMessage(data.response, "bot");
+
+  } catch {
+    document.getElementById("typing").style.display = "none";
+    renderMessage("⚠️ Server error", "bot");
+  }
+}
+
+// UTIL
+function toggleTheme() {
+  isDark = !isDark;
+  document.body.classList.toggle("light-theme");
+}
+
+function clearChat() {
+  if (!confirm("Clear chat?")) return;
+  document.getElementById("chat").innerHTML = "";
+  history = [];
+  localStorage.removeItem("chat_history");
+}
+
+function exportChat() {
+  let txt = history.map(m => m.type + ": " + m.text).join("\n");
+  let blob = new Blob([txt], {type:"text/plain"});
+  let a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "chat.txt";
+  a.click();
+}
+
+document.getElementById("msg").addEventListener("keydown", e=>{
+  if(e.key==="Enter") send();
+});
+</script>
+
+</body>
+</html>
